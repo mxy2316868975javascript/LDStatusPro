@@ -208,7 +208,16 @@
                   {{ deliveringOrderId === getOrderKey(order) ? '发货中...' : '立即发货' }}
                 </button>
               </template>
-              <span v-else class="order-action" @click="viewOrderDetail(order)">查看详情 →</span>
+              <template v-else>
+                <button
+                  v-if="canReviewOrder(order)"
+                  class="action-btn review-btn"
+                  @click.stop="goToOrderReview(order)"
+                >
+                  去评价
+                </button>
+                <span class="order-action" @click="viewOrderDetail(order)">查看详情 →</span>
+              </template>
             </div>
           </div>
           
@@ -565,6 +574,28 @@ function isBuyRequestOrder(order) {
 function getOrderQuantity(order) {
   const quantity = Number(order?.quantity ?? order?.product_quantity ?? 1)
   return Number.isInteger(quantity) && quantity > 0 ? quantity : 1
+}
+
+function getOrderProductId(order) {
+  const value = Number(order?.product_id ?? order?.product?.id ?? 0)
+  return Number.isInteger(value) && value > 0 ? value : 0
+}
+
+function canReviewOrder(order) {
+  if (currentRole.value !== 'buyer') return false
+  if (!isCdkOrder(order)) return false
+  if (order?.status !== 'delivered') return false
+  if (order?.comment_enabled === false) return false
+  return getOrderProductId(order) > 0
+}
+
+function goToOrderReview(order) {
+  const productId = getOrderProductId(order)
+  if (!productId) {
+    toast.warning('该订单缺少商品信息，无法跳转评价')
+    return
+  }
+  router.push({ path: `/product/${productId}`, hash: '#comments' })
 }
 
 // 是否有发货内容
@@ -1216,6 +1247,15 @@ onUnmounted(() => {
 }
 
 .action-btn.enter-btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.action-btn.review-btn {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+}
+
+.action-btn.review-btn:hover:not(:disabled) {
   opacity: 0.92;
 }
 

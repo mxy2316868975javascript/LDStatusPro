@@ -23,6 +23,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { sanitizeRedirect } from '@/utils/navigation'
+import { api } from '@/utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,6 +104,12 @@ onMounted(async () => {
       toast.success('登录成功')
       
       // 清除 hash 以免影响后续导航
+      // 触发一次鉴权请求，确保 ld-store-backend 侧完成 users 表同步
+      const syncResp = await api.get('/api/shop/auth/verify', { timeout: 8000 })
+      if (!syncResp?.success) {
+        console.warn('[AuthCallback] user sync verify failed:', syncResp?.error || syncResp)
+      }
+
       history.replaceState(null, '', window.location.pathname + window.location.search)
       
       // 跳转到之前的页面

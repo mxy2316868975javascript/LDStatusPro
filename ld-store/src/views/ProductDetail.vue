@@ -203,6 +203,136 @@
           <h2 class="section-title">📝 物品详情</h2>
           <div class="description-content">{{ product.description || '暂无描述' }}</div>
         </div>
+
+        <div id="comments" v-if="isCdk" class="detail-comments">
+          <div class="comment-header">
+            <h2 class="section-title">💬 物品评论</h2>
+            <button
+              class="comment-refresh-btn"
+              :disabled="commentLoading"
+              @click="loadComments(commentPagination.page || 1)"
+            >
+              {{ commentLoading ? '加载中...' : '刷新' }}
+            </button>
+          </div>
+
+          <div v-if="commentLoading" class="comment-empty">评论加载中...</div>
+          <div v-else-if="!commentEnabled" class="comment-empty">{{ commentDisabledReason }}</div>
+          <template v-else>
+            <div v-if="commentList.length === 0" class="comment-empty">还没有评论，来发表第一条评价吧</div>
+            <div v-else class="comment-list">
+              <div
+                v-for="item in commentList"
+                :key="item.id"
+                class="comment-item"
+              >
+                <div class="comment-meta-line">
+                  <div class="comment-user">
+                    <img
+                      :src="item.user?.avatar_url || defaultAvatar"
+                      alt=""
+                      class="comment-avatar"
+                      referrerpolicy="no-referrer"
+                      @error="handleCommentAvatarError"
+                    />
+                    <span class="comment-name">{{ item.user?.nickname || item.user?.username || '匿名用户' }}</span>
+                    <span class="comment-username">@{{ item.user?.username || 'unknown' }}</span>
+                    <span v-if="item.is_purchased" class="comment-purchased-tag">已购</span>
+                  </div>
+
+                  <div class="comment-right">
+                    <div class="comment-action-wrap">
+                      <button
+                        class="comment-action-btn"
+                        :disabled="commentDeletingId === item.id || commentReportingId === item.id"
+                        @click.stop="toggleCommentActionMenu(item.id)"
+                      >
+                        ⋯
+                      </button>
+                      <div
+                        v-if="commentActionMenuId === item.id"
+                        class="comment-action-menu"
+                      >
+                        <button
+                          class="comment-action-item"
+                          :disabled="commentReportingId === item.id"
+                          @click.stop="openCommentReportModal(item)"
+                        >
+                          {{ commentReportingId === item.id ? '举报中...' : '举报' }}
+                        </button>
+                        <button
+                          v-if="item.can_delete"
+                          class="comment-action-item danger"
+                          :disabled="commentDeletingId === item.id"
+                          @click.stop="deleteComment(item)"
+                        >
+                          {{ commentDeletingId === item.id ? '删除中...' : '删除' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="comment-content">{{ item.content }}</div>
+                <div class="comment-footer">
+                  <time class="comment-time">{{ formatCommentTime(item.created_at) }}</time>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="commentPagination.totalPages > 1" class="comment-pagination">
+              <button
+                class="comment-page-btn"
+                :disabled="commentLoading || commentPagination.page <= 1"
+                @click="changeCommentPage(commentPagination.page - 1)"
+              >
+                上一页
+              </button>
+              <button
+                v-for="pageNo in commentPageNumbers"
+                :key="`comment-page-${pageNo}`"
+                class="comment-page-btn"
+                :class="{ active: pageNo === commentPagination.page }"
+                :disabled="commentLoading || pageNo === commentPagination.page"
+                @click="changeCommentPage(pageNo)"
+              >
+                {{ pageNo }}
+              </button>
+              <button
+                class="comment-page-btn"
+                :disabled="commentLoading || commentPagination.page >= commentPagination.totalPages"
+                @click="changeCommentPage(commentPagination.page + 1)"
+              >
+                下一页
+              </button>
+            </div>
+
+            <div class="comment-compose">
+              <div class="comment-compose-title">发布评论</div>
+              <div v-if="!userStore.isLoggedIn" class="comment-login-tip">
+                评论需要登录后发布
+                <button class="comment-login-btn" @click="goLogin">去登录</button>
+              </div>
+              <template v-else>
+                <textarea
+                  v-model="commentDraft"
+                  class="comment-textarea"
+                  maxlength="500"
+                  placeholder="欢迎分享你对这个物品的真实体验（5-500字）"
+                ></textarea>
+                <div class="comment-compose-footer">
+                  <span class="comment-count">{{ commentDraft.trim().length }}/500</span>
+                  <button
+                    class="comment-submit-btn"
+                    :disabled="commentSubmitting || commentDraft.trim().length < 5 || commentDraft.trim().length > 500"
+                    @click="submitComment"
+                  >
+                    {{ commentSubmitting ? '发布中...' : '发布评论' }}
+                  </button>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
         
         <!-- 底部购买按钮（移动端固定底部） -->
                 <div class="action-bottom mobile-only">
@@ -334,17 +464,51 @@
         </div>
       </div>
     </Teleport>
+    <Teleport to="body">
+      <div
+        v-if="showCommentReportModal"
+        class="report-modal-overlay"
+        @click.self="closeCommentReportModal"
+      >
+        <div class="report-modal">
+          <div class="report-modal-header">
+            <h3>举报评论</h3>
+            <button class="report-modal-close" @click="closeCommentReportModal">&times;</button>
+          </div>
+          <p class="report-modal-desc">请描述该评论存在的问题，管理员会尽快处理。</p>
+          <textarea
+            v-model="commentReportReason"
+            class="report-textarea"
+            maxlength="500"
+            placeholder="请填写举报原因（5-500字）"
+          ></textarea>
+          <div class="report-modal-footer">
+            <span class="report-count">{{ commentReportReason.trim().length }}/500</span>
+            <div class="report-actions">
+              <button class="report-cancel-btn" @click="closeCommentReportModal">取消</button>
+              <button
+                class="report-submit-btn"
+                :disabled="commentReportSubmitting || commentReportReason.trim().length < 5"
+                @click="submitCommentReport"
+              >
+                {{ commentReportSubmitting ? '提交中...' : '提交举报' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useShopStore } from '@/stores/shop'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
-import { formatRelativeTime, formatPrice } from '@/utils/format'
+import { formatRelativeTime, formatPrice, formatDate } from '@/utils/format'
 import { escapeHtml } from '@/utils/security'
 import { prepareNewTab, openInNewTab, cleanupPreparedTab } from '@/utils/newTab'
 import Skeleton from '@/components/common/Skeleton.vue'
@@ -367,6 +531,25 @@ const reportReason = ref('')
 const reportSubmitting = ref(false)
 const favoriteSubmitting = ref(false)
 const selectedQuantity = ref(1)
+const commentLoading = ref(false)
+const commentList = ref([])
+const commentEnabled = ref(false)
+const commentDisabledReason = ref('该物品暂未开启评论')
+const commentPagination = ref({
+  total: 0,
+  page: 1,
+  pageSize: 10,
+  totalPages: 0
+})
+const commentDraft = ref('')
+const commentSubmitting = ref(false)
+const commentActionMenuId = ref(null)
+const commentDeletingId = ref(null)
+const commentReportingId = ref(null)
+const showCommentReportModal = ref(false)
+const commentReportReason = ref('')
+const commentReportSubmitting = ref(false)
+const commentReportTarget = ref(null)
 
 const quickReportReasons = [
   '收款配置缺失，无法生成支付链接',
@@ -474,6 +657,22 @@ const quantityHint = computed(() => {
   return hints.join('，')
 })
 
+const commentPageNumbers = computed(() => {
+  const totalPages = Number(commentPagination.value.totalPages || 0)
+  const currentPage = Number(commentPagination.value.page || 1)
+  if (totalPages <= 1) return []
+
+  const maxButtons = 5
+  let start = Math.max(1, currentPage - 2)
+  let end = Math.min(totalPages, start + maxButtons - 1)
+
+  if (end - start + 1 < maxButtons) {
+    start = Math.max(1, end - maxButtons + 1)
+  }
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+})
+
 // 分类
 const categoryIcon = computed(() => product.value?.category_icon || '📦')
 const categoryName = computed(() => product.value?.category_name || '其他')
@@ -508,6 +707,7 @@ const coverStyle = computed(() => {
 
 // 加载物品
 onMounted(async () => {
+  document.addEventListener('click', handleDocumentClick)
   const productId = route.params.id
   if (!productId) {
     loading.value = false
@@ -523,14 +723,22 @@ onMounted(async () => {
     product.value = data
     // 更新页面标题
     document.title = `${data.name} - LD士多`
+    if (data.product_type === 'cdk') {
+      await loadComments(1)
+    }
   }
   
   loading.value = false
+  if (route.hash === '#comments') {
+    await nextTick()
+    document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 })
 
 onUnmounted(() => {
   document.body.style.overflow = ''
   document.removeEventListener('keydown', handleEscKey)
+  document.removeEventListener('click', handleDocumentClick)
 })
 
 watch(
@@ -552,6 +760,202 @@ watch(
 )
 
 // 方法
+function goLogin() {
+  router.push({ name: 'Login', query: { redirect: route.fullPath } })
+}
+
+function formatCommentTime(timestamp) {
+  const value = Number(timestamp || 0)
+  if (!value) return ''
+  return formatDate(value, 'YYYY-MM-DD HH:mm:ss')
+}
+
+function handleCommentAvatarError(e) {
+  e.target.src = defaultAvatar
+}
+
+function handleDocumentClick(event) {
+  const target = event?.target
+  if (!(target instanceof Element)) return
+  if (!target.closest('.comment-action-wrap')) {
+    commentActionMenuId.value = null
+  }
+}
+
+async function loadComments(page = 1) {
+  if (!product.value?.id) return
+  const targetPage = Math.max(Number.parseInt(page, 10) || 1, 1)
+
+  commentLoading.value = true
+  try {
+    const result = await shopStore.fetchProductComments(product.value.id, { page: targetPage, pageSize: 10 })
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '加载评论失败')
+        : (result?.error || result?.message || '加载评论失败')
+      toast.error(message)
+      return
+    }
+
+    const data = result.data || {}
+    const pagination = data.pagination || {}
+    commentEnabled.value = !!data.commentEnabled
+    commentDisabledReason.value = data.disabledReason || '该物品暂未开启评论'
+    commentList.value = Array.isArray(data.comments) ? data.comments : []
+    commentPagination.value = {
+      total: Number(pagination.total || 0),
+      page: Number(pagination.page || targetPage),
+      pageSize: Number(pagination.pageSize || 10),
+      totalPages: Number(pagination.totalPages || 0)
+    }
+    commentActionMenuId.value = null
+  } catch (error) {
+    toast.error(`加载评论失败：${error.message}`)
+  } finally {
+    commentLoading.value = false
+  }
+}
+
+function changeCommentPage(pageNo) {
+  if (commentLoading.value) return
+  const targetPage = Math.max(Number.parseInt(pageNo, 10) || 1, 1)
+  if (targetPage === commentPagination.value.page) return
+  loadComments(targetPage)
+}
+
+function toggleCommentActionMenu(commentId) {
+  commentActionMenuId.value = commentActionMenuId.value === commentId ? null : commentId
+}
+
+async function submitComment() {
+  if (!product.value?.id || commentSubmitting.value) return
+  if (!userStore.isLoggedIn) {
+    const confirmed = await dialog.confirm('发布评论需要先登录，是否前往登录？', {
+      title: '需要登录',
+      icon: '🔐',
+      confirmText: '去登录',
+      cancelText: '取消'
+    })
+    if (confirmed) goLogin()
+    return
+  }
+
+  const content = commentDraft.value.trim()
+  if (content.length < 5 || content.length > 500) {
+    toast.error('评论内容需为 5-500 个字符')
+    return
+  }
+
+  commentSubmitting.value = true
+  try {
+    const result = await shopStore.createProductComment(product.value.id, content)
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '评论发布失败')
+        : (result?.error || result?.message || '评论发布失败')
+      toast.error(message)
+      return
+    }
+
+    commentDraft.value = ''
+    const tip = result?.data?.message || '评论已提交'
+    toast.success(tip)
+    await loadComments(1)
+  } catch (error) {
+    toast.error(`评论发布失败：${error.message}`)
+  } finally {
+    commentSubmitting.value = false
+  }
+}
+
+async function deleteComment(comment) {
+  if (!comment?.id || commentDeletingId.value) return
+  const confirmed = await dialog.confirm('确定删除这条评论吗？删除后不可恢复。', {
+    title: '删除评论',
+    icon: '🗑️',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+
+  commentDeletingId.value = comment.id
+  try {
+    const result = await shopStore.deleteProductComment(comment.id)
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '删除评论失败')
+        : (result?.error || result?.message || '删除评论失败')
+      toast.error(message)
+      return
+    }
+    toast.success(result?.data?.message || '评论已删除')
+    const currentPage = Number(commentPagination.value.page || 1)
+    const targetPage = commentList.value.length === 1 ? Math.max(1, currentPage - 1) : currentPage
+    await loadComments(targetPage)
+  } catch (error) {
+    toast.error(`删除评论失败：${error.message}`)
+  } finally {
+    commentDeletingId.value = null
+    commentActionMenuId.value = null
+  }
+}
+
+async function openCommentReportModal(comment) {
+  if (!comment?.id) return
+  if (!userStore.isLoggedIn) {
+    const confirmed = await dialog.confirm('举报评论需要先登录，是否前往登录？', {
+      title: '需要登录',
+      icon: '🔐',
+      confirmText: '去登录',
+      cancelText: '取消'
+    })
+    if (confirmed) goLogin()
+    return
+  }
+  commentReportTarget.value = comment
+  commentReportReason.value = ''
+  commentActionMenuId.value = null
+  showCommentReportModal.value = true
+  syncModalState()
+}
+
+function closeCommentReportModal() {
+  showCommentReportModal.value = false
+  commentReportReason.value = ''
+  commentReportTarget.value = null
+  syncModalState()
+}
+
+async function submitCommentReport() {
+  if (!commentReportTarget.value?.id || commentReportSubmitting.value) return
+  const reason = commentReportReason.value.trim()
+  if (reason.length < 5 || reason.length > 500) {
+    toast.error('举报原因需为 5-500 个字符')
+    return
+  }
+
+  commentReportSubmitting.value = true
+  commentReportingId.value = commentReportTarget.value.id
+  try {
+    const result = await shopStore.reportProductComment(commentReportTarget.value.id, reason)
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '举报提交失败')
+        : (result?.error || result?.message || '举报提交失败')
+      toast.error(message)
+      return
+    }
+
+    toast.success(result?.data?.message || '举报已提交，感谢反馈')
+    closeCommentReportModal()
+  } catch (error) {
+    toast.error(`举报提交失败：${error.message}`)
+  } finally {
+    commentReportSubmitting.value = false
+    commentReportingId.value = null
+  }
+}
+
 function goBack() {
   if (window.history.length > 1) {
     router.back()
@@ -656,6 +1060,10 @@ function closeImagePreview() {
 
 function handleEscKey(e) {
   if (e.key === 'Escape') {
+    if (showCommentReportModal.value) {
+      closeCommentReportModal()
+      return
+    }
     if (showReportModal.value) {
       closeReportModal()
       return
@@ -667,7 +1075,7 @@ function handleEscKey(e) {
 }
 
 function syncModalState() {
-  const opened = showImagePreview.value || showReportModal.value
+  const opened = showImagePreview.value || showReportModal.value || showCommentReportModal.value
   document.body.style.overflow = opened ? 'hidden' : ''
   document.removeEventListener('keydown', handleEscKey)
   if (opened) {
@@ -1511,6 +1919,308 @@ async function handleBuyLink() {
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.detail-comments {
+  margin-top: 20px;
+  background: var(--bg-card);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comment-header .section-title {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.comment-refresh-btn {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comment-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-empty {
+  margin-top: 16px;
+  border: 1px dashed var(--border-light);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.comment-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comment-item {
+  position: relative;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  padding: 12px;
+}
+
+.comment-meta-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comment-user {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.comment-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comment-username {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comment-purchased-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f6e8;
+  color: #2f855a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.comment-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.comment-action-wrap {
+  position: relative;
+}
+
+.comment-action-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  font-size: 18px;
+  padding-bottom: 2px;
+}
+
+.comment-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-action-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 96px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.comment-action-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.comment-action-item:hover {
+  background: var(--bg-secondary);
+}
+
+.comment-action-item.danger {
+  color: var(--color-danger);
+}
+
+.comment-action-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-content {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.comment-pagination {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.comment-page-btn {
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: 9px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comment-page-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.comment-page-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-compose {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.comment-compose-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.comment-login-tip {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comment-login-btn {
+  border: none;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.comment-compose-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.comment-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.comment-submit-btn {
+  border: none;
+  border-radius: 10px;
+  background: #266f3f;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.comment-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 移动端底部按钮 */

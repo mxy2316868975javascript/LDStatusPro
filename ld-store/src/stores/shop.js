@@ -271,6 +271,40 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
+  async function fetchProductComments(productId, options = {}) {
+    const page = Math.max(Number.parseInt(options.page, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(Number.parseInt(options.pageSize, 10) || 10, 1), 10)
+    try {
+      return await api.get(`/api/shop/products/${productId}/comments?page=${page}&pageSize=${pageSize}`)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
+  async function createProductComment(productId, content) {
+    try {
+      return await api.post(`/api/shop/products/${productId}/comments`, { content })
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
+  async function deleteProductComment(commentId) {
+    try {
+      return await api.delete(`/api/shop/comments/${commentId}`)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
+  async function reportProductComment(commentId, reason) {
+    try {
+      return await api.post(`/api/shop/comments/${commentId}/report`, { reason })
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
   // 获取自己的商品详情 (需要登录，可获取任意状态的商品)
   async function addFavorite(productId) {
     try {
@@ -887,6 +921,10 @@ export const useShopStore = defineStore('shop', () => {
     fetchOrderDetail,
     fetchProductDetail,
     reportProduct,
+    fetchProductComments,
+    createProductComment,
+    deleteProductComment,
+    reportProductComment,
     addFavorite,
     removeFavorite,
     fetchMyFavorites,
