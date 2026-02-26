@@ -18,7 +18,7 @@
       <li><strong>求购方</strong>：发布需求、调价、创建支付订单、刷新订单状态。</li>
       <li><strong>服务方</strong>：发起洽谈、沟通交付方案、在完成后通过私信交付。</li>
       <li><strong>管理员</strong>：审核求购、管理会话、查看日志与违禁词。</li>
-      <li><strong>入口页面</strong>：<code>/publish</code>、<code>/buy-request/:id</code>、<code>/user/buy-requests</code>、<code>/user/buy-chats</code>、<code>/user/orders?tab=buy</code>。</li>
+      <li><strong>入口页面</strong>：<code>/publish</code>、<code>/buy-request/:id</code>、<code>/user/buy-requests</code>、<code>/user/messages</code>、<code>/user/orders?tab=buy</code>。</li>
     </ul>
 
     <h2>二、发布与审核</h2>
@@ -64,7 +64,7 @@
     <h2>六、我该去哪里看进度</h2>
     <ul>
       <li><strong>我的求购</strong>：查看自己发布的求购状态、会话数量、待确认数量。</li>
-      <li><strong>聊天洽谈</strong>：集中查看自己参与的会话、未读消息与最新进展。</li>
+      <li><strong>我的消息</strong>：集中查看系统通知、会话未读消息与最新进展。</li>
       <li><strong>求购订单</strong>：在“我的订单”中的“求购订单”Tab 查看支付状态与回调结果。</li>
       <li><strong>消息提醒</strong>：用户中心与顶部菜单会显示未读会话提醒。</li>
     </ul>

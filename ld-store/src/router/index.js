@@ -72,10 +72,14 @@ const routes = [
     meta: { title: '我的求购 - LD士多', requiresAuth: true }
   },
   {
-    path: '/user/buy-chats',
-    name: 'MyBuyChats',
+    path: '/user/messages',
+    name: 'MyMessages',
     component: () => import('@/views/MyBuyChats.vue'),
-    meta: { title: '聊天洽谈 - LD士多', requiresAuth: true }
+    meta: { title: '我的消息 - LD士多', requiresAuth: true }
+  },
+  {
+    path: '/user/buy-chats',
+    redirect: '/user/messages'
   },
   {
     path: '/user/settings',

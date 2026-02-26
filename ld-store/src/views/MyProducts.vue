@@ -310,7 +310,7 @@ async function loadProducts(append = false) {
 }
 
 // 排序物品
-// 规则1: 已拒绝 → 审核中 → 已上架 → 已下架（需要处理的在前）
+// 规则1: 已拒绝(含 AI/人工) → 待人工审核 → 待AI审核 → 已上架(AI/人工) → 已下架（需要处理的在前）
 // 规则2: 按修改时间排序（新的在前）
 function sortProducts(productList) {
   return [...productList].sort((a, b) => {
@@ -320,12 +320,19 @@ function sortProducts(productList) {
     // 定义状态优先级（更小的数字优先级更高）
     // 已拒绝最需要关注，放最前面
     const statusPriority = {
-      'rejected': 0,      // 已拒绝 - 最需要关注
-      'pending': 1,       // 审核中 - 等待处理
-      'approved': 2,      // 已上架 - 正常状态
-      'active': 2,
-      'offline': 3,       // 已下架 - 不活跃
-      'inactive': 3
+      'ai_rejected': 0,
+      'manual_rejected': 0,
+      'rejected': 0,      // 旧状态兼容
+      'pending_manual': 1,
+      'pending_ai': 2,
+      'pending': 2,       // 旧状态兼容
+      'ai_approved': 3,
+      'manual_approved': 3,
+      'approved': 3,      // 旧状态兼容
+      'active': 3,
+      'offline_manual': 4,
+      'offline': 4,       // 旧状态兼容
+      'inactive': 4
     }
     
     const priorityA = statusPriority[statusA] ?? 999
@@ -361,8 +368,8 @@ function editProduct(product) {
 
 // 判断是否为上架状态
 function isProductActive(product) {
-  const status = product.status
-  return status === 'approved' || status === 'active'
+  const status = getProductStatus(product)
+  return ['ai_approved', 'manual_approved'].includes(status)
 }
 
 // 切换状态
@@ -390,7 +397,7 @@ async function toggleStatus(product) {
         toast.error(result?.error?.message || result?.error || '下架失败')
         return
       }
-      product.status = 'offline'
+      product.status = 'offline_manual'
       toast.success('物品已下架')
     } else {
       // 重新上架操作（重新提交审核）
@@ -407,7 +414,7 @@ async function toggleStatus(product) {
         toast.error(result?.error?.message || result?.error || '上架失败')
         return
       }
-      product.status = 'pending'
+      product.status = 'pending_ai'
       toast.success('已重新提交审核')
     }
   } catch (error) {
@@ -507,11 +514,25 @@ async function addCdks() {
 }
 
 // 获取物品状态（处理多种字段名和状态值）
+function normalizeProductStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (!normalized) return 'pending_ai'
+
+  const alias = {
+    approved: 'manual_approved',
+    active: 'manual_approved',
+    pending: 'pending_ai',
+    rejected: 'manual_rejected',
+    offline: 'offline_manual',
+    inactive: 'offline_manual'
+  }
+
+  return alias[normalized] || normalized
+}
+
 function getProductStatus(product) {
-  const status = product.status || 'pending'
-  // 将后端状态映射为显示状态
-  // approved = 已上架, pending = 审核中, rejected = 已拒绝, offline = 已下架
-  return status
+  const rawStatus = product?.status || product?.product_status || product?.productStatus || 'pending_ai'
+  return normalizeProductStatus(rawStatus)
 }
 
 // 获取物品类型（处理多种字段名）
@@ -521,15 +542,17 @@ function getProductType(product) {
 
 // 状态文本
 function getStatusText(status) {
+  const normalized = normalizeProductStatus(status)
   const map = {
-    'approved': '已上架',
-    'pending': '审核中',
-    'rejected': '已拒绝',
-    'offline': '已下架',
-    'active': '已上架',
-    'inactive': '已下架'
+    pending_ai: '审核中',
+    pending_manual: '待人工审核',
+    ai_approved: '已上架',
+    manual_approved: '已上架',
+    ai_rejected: '已拒绝',
+    manual_rejected: '已拒绝',
+    offline_manual: '已下架'
   }
-  return map[status] || status || '未知'
+  return map[normalized] || '未知状态'
 }
 
 // 类型文本
@@ -544,15 +567,17 @@ function getTypeText(type) {
 
 // 状态图标
 function getStatusIcon(status) {
+  const normalized = normalizeProductStatus(status)
   const map = {
-    'approved': '✅',
-    'active': '✅',
-    'pending': '⏳',
-    'rejected': '❌',
-    'offline': '⏸️',
-    'inactive': '⏸️'
+    pending_ai: '⏳',
+    pending_manual: '🧑‍⚖️',
+    ai_approved: '✅',
+    manual_approved: '✅',
+    ai_rejected: '❌',
+    manual_rejected: '❌',
+    offline_manual: '⏸️'
   }
-  return map[status] || '❓'
+  return map[normalized] || '❓'
 }
 
 // 类型图标
@@ -610,18 +635,31 @@ function handleImageError(e) {
 
 // 获取拒绝/下架原因
 function getRejectReason(product) {
-  if (product.status === 'rejected') {
-    return product.reject_reason || product.rejectReason || '物品未通过审核'
+  const status = getProductStatus(product)
+  const reason =
+    product.status_reason
+    || product.statusReason
+    || product.reject_reason
+    || product.rejectReason
+    || product.offline_reason
+    || product.offlineReason
+    || ''
+
+  if (reason) return reason
+
+  if (['ai_rejected', 'manual_rejected'].includes(status)) {
+    return '物品未通过审核'
   }
-  if (product.status === 'offline' && product.offline_reason) {
-    return product.offline_reason
+  if (status === 'offline_manual') {
+    return '物品已下架'
   }
   return null
 }
 
 // 是否可切换状态（已拒绝的不能切换）
 function canToggleStatus(product) {
-  return product.status !== 'pending' && product.status !== 'rejected'
+  const blockedStatuses = ['pending_ai', 'pending_manual', 'ai_rejected', 'manual_rejected']
+  return !blockedStatuses.includes(getProductStatus(product))
 }
 
 const CDK_STATUS_PRIORITY = {
@@ -947,24 +985,35 @@ onMounted(() => {
   transition: background 0.3s;
 }
 
+.product-card.ai_approved::before,
+.product-card.manual_approved::before,
 .product-card.approved::before,
 .product-card.active::before {
   background: linear-gradient(180deg, #52c41a 0%, #73d13d 100%);
 }
 
+.product-card.pending_ai::before,
 .product-card.pending::before {
   background: linear-gradient(180deg, #faad14 0%, #ffc53d 100%);
 }
 
+.product-card.pending_manual::before {
+  background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.product-card.ai_rejected::before,
+.product-card.manual_rejected::before,
 .product-card.rejected::before {
   background: linear-gradient(180deg, #ff4d4f 0%, #ff7875 100%);
 }
 
+.product-card.offline_manual::before,
 .product-card.offline::before,
 .product-card.inactive::before {
   background: linear-gradient(180deg, #8c8c8c 0%, #bfbfbf 100%);
 }
 
+.product-card.offline_manual,
 .product-card.offline,
 .product-card.inactive {
   opacity: 0.8;
@@ -987,6 +1036,8 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
+.status-badge.ai_approved,
+.status-badge.manual_approved,
 .status-badge.approved,
 .status-badge.active {
   background: linear-gradient(135deg, rgba(82, 196, 26, 0.15) 0%, rgba(115, 209, 61, 0.2) 100%);
@@ -994,18 +1045,28 @@ onMounted(() => {
   border: 1px solid rgba(82, 196, 26, 0.3);
 }
 
+.status-badge.pending_ai,
 .status-badge.pending {
   background: linear-gradient(135deg, rgba(250, 173, 20, 0.15) 0%, rgba(255, 197, 61, 0.2) 100%);
   color: #d48806;
   border: 1px solid rgba(250, 173, 20, 0.3);
 }
 
+.status-badge.pending_manual {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.2) 100%);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-badge.ai_rejected,
+.status-badge.manual_rejected,
 .status-badge.rejected {
   background: linear-gradient(135deg, rgba(255, 77, 79, 0.15) 0%, rgba(255, 120, 117, 0.2) 100%);
   color: #cf1322;
   border: 1px solid rgba(255, 77, 79, 0.3);
 }
 
+.status-badge.offline_manual,
 .status-badge.offline,
 .status-badge.inactive {
   background: linear-gradient(135deg, rgba(140, 140, 140, 0.1) 0%, rgba(191, 191, 191, 0.15) 100%);

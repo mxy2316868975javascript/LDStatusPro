@@ -7,7 +7,7 @@
           <p class="page-subtitle">管理你发布的求购信息与洽谈进度</p>
         </div>
         <div class="header-actions">
-          <router-link to="/user/buy-chats" class="header-link">聊天洽谈</router-link>
+          <router-link to="/user/messages" class="header-link">我的消息</router-link>
           <router-link to="/publish?type=buy" class="create-btn">+ 发布求购</router-link>
         </div>
       </div>

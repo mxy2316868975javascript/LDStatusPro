@@ -120,7 +120,7 @@ function goChat() {
     router.push(path)
     return
   }
-  router.push('/user/buy-chats')
+  router.push('/user/messages')
 }
 
 function statusText(status) {

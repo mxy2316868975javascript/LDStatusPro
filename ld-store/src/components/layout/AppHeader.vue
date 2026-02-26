@@ -199,12 +199,12 @@
                 🌱 我的求购
               </a>
               <a
-                href="/user/buy-chats"
+                href="/user/messages"
                 class="dropdown-item"
                 :class="{ 'with-unread': buyChatUnread > 0 }"
-                @click.prevent="navigateTo('/user/buy-chats')"
+                @click.prevent="navigateTo('/user/messages')"
               >
-                💬 聊天洽谈
+                💬 我的消息
                 <span v-if="buyChatUnread > 0" class="dropdown-badge">{{ unreadDisplay }}</span>
               </a>
               <a href="/user/my-shop" class="dropdown-item" @click.prevent="navigateTo('/user/my-shop')">
@@ -439,7 +439,7 @@ async function fetchBuyChatUnread() {
   }
 
   try {
-    const result = await api.get('/api/shop/buy-sessions/unread-summary')
+    const result = await api.get('/api/shop/messages/unread-summary')
     if (!result.success) return
     buyChatUnread.value = Number(result.data?.totalUnread || 0)
   } catch (_) {

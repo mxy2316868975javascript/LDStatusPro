@@ -56,9 +56,9 @@
             <span class="menu-arrow">→</span>
           </router-link>
 
-          <router-link to="/user/buy-chats" class="menu-item">
+          <router-link to="/user/messages" class="menu-item">
             <span class="menu-icon">💬</span>
-            <span class="menu-label">聊天洽谈</span>
+            <span class="menu-label">我的消息</span>
             <span class="menu-arrow">→</span>
           </router-link>
 

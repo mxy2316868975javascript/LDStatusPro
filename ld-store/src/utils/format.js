@@ -139,9 +139,16 @@ export function formatOrderStatus(status) {
  */
 export function formatProductStatus(status) {
   const statusMap = {
+    'ai_approved': { text: '在售（AI通过）', color: 'success' },
+    'manual_approved': { text: '在售（人工通过）', color: 'success' },
     'approved': { text: '在售', color: 'success' },
+    'pending_ai': { text: '待AI审核', color: 'warning' },
+    'pending_manual': { text: '待人工审核', color: 'warning' },
     'pending': { text: '待审核', color: 'warning' },
+    'ai_rejected': { text: 'AI拒绝', color: 'danger' },
+    'manual_rejected': { text: '人工拒绝', color: 'danger' },
     'rejected': { text: '已拒绝', color: 'danger' },
+    'offline_manual': { text: '已下架', color: 'default' },
     'offline': { text: '已下架', color: 'default' }
   }
   

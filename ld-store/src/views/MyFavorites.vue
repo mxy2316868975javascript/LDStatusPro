@@ -109,14 +109,34 @@ function getPrice(item) {
   return formatPrice(price * discount)
 }
 
-function getStatusText(status) {
-  const map = {
-    approved: '在售',
-    offline: '已下架',
-    pending: '待审核',
-    rejected: '已拒绝'
+function normalizeProductStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  const alias = {
+    approved: 'manual_approved',
+    active: 'manual_approved',
+    pending: 'pending_ai',
+    rejected: 'manual_rejected',
+    offline: 'offline_manual',
+    inactive: 'offline_manual'
   }
-  return map[status] || '未知状态'
+
+  return alias[normalized] || normalized
+}
+
+function getStatusText(status) {
+  const normalized = normalizeProductStatus(status)
+  const map = {
+    ai_approved: '已上架',
+    manual_approved: '已上架',
+    pending_ai: '审核中',
+    pending_manual: '待人工审核',
+    ai_rejected: '已拒绝',
+    manual_rejected: '已拒绝',
+    offline_manual: '已下架'
+  }
+  return map[normalized] || '未知状态'
 }
 
 function getSellerText(item) {
@@ -361,21 +381,28 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
+.meta-status.status-ai_approved,
+.meta-status.status-manual_approved,
 .meta-status.status-approved {
   background: var(--color-success-bg);
   color: var(--color-success);
 }
 
+.meta-status.status-offline_manual,
 .meta-status.status-offline {
   background: rgba(148, 163, 184, 0.18);
   color: #64748b;
 }
 
+.meta-status.status-pending_ai,
+.meta-status.status-pending_manual,
 .meta-status.status-pending {
   background: rgba(245, 158, 11, 0.14);
   color: #b45309;
 }
 
+.meta-status.status-ai_rejected,
+.meta-status.status-manual_rejected,
 .meta-status.status-rejected {
   background: rgba(239, 68, 68, 0.12);
   color: #dc2626;
