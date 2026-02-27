@@ -275,6 +275,100 @@
                 <div class="comment-content">{{ item.content }}</div>
                 <div class="comment-footer">
                   <time class="comment-time">{{ formatCommentTime(item.created_at) }}</time>
+                  <div class="comment-footer-actions">
+                    <button
+                      class="comment-footer-btn comment-reply-btn"
+                      :class="{ active: isCommentReplyComposerOpen(item.id) }"
+                      @click="toggleCommentReplyComposer(item.id)"
+                    >
+                      {{ isCommentReplyComposerOpen(item.id) ? '收起输入' : '回复' }} {{ Number(item.reply_count || 0) }}
+                    </button>
+                    <button
+                      class="comment-footer-btn comment-vote-btn"
+                      :class="{ active: normalizeCommentVoteType(item.viewer_vote) === COMMENT_VOTE_UP }"
+                      :disabled="isCommentVoting(item.id)"
+                      @click="voteComment(item, COMMENT_VOTE_UP)"
+                    >
+                      <svg class="comment-vote-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M14 2.6c-.7 0-1.3.5-1.4 1.2L12 8H8.5c-1.4 0-2.5 1.1-2.5 2.5v1.2c0 .3.1.5.2.8l1.2 7.4c.2 1 1 1.7 2 1.7H18c1 0 1.8-.7 2-1.7l1-5.7c.2-1.3-.7-2.5-2-2.5h-4.1l.5-5.3c.1-.8-.5-1.5-1.3-1.6H14zM3 10h2v11H3c-.6 0-1-.4-1-1V11c0-.6.4-1 1-1z" />
+                      </svg>
+                      <span>{{ Number(item.upvote_count || 0) }}</span>
+                    </button>
+                    <button
+                      class="comment-footer-btn comment-vote-btn"
+                      :class="{ active: normalizeCommentVoteType(item.viewer_vote) === COMMENT_VOTE_DOWN }"
+                      :disabled="isCommentVoting(item.id)"
+                      @click="voteComment(item, COMMENT_VOTE_DOWN)"
+                    >
+                      <svg class="comment-vote-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <g transform="rotate(180 12 12)">
+                          <path d="M14 2.6c-.7 0-1.3.5-1.4 1.2L12 8H8.5c-1.4 0-2.5 1.1-2.5 2.5v1.2c0 .3.1.5.2.8l1.2 7.4c.2 1 1 1.7 2 1.7H18c1 0 1.8-.7 2-1.7l1-5.7c.2-1.3-.7-2.5-2-2.5h-4.1l.5-5.3c.1-.8-.5-1.5-1.3-1.6H14zM3 10h2v11H3c-.6 0-1-.4-1-1V11c0-.6.4-1 1-1z" />
+                        </g>
+                      </svg>
+                      <span>{{ Number(item.downvote_count || 0) }}</span>
+                    </button>
+                  </div>
+                </div>
+                <div v-if="Number(item.reply_count || 0) > 0 || isCommentReplyComposerOpen(item.id) || isCommentReplyLoading(item.id)" class="comment-reply-panel">
+                  <div class="comment-reply-list">
+                    <div v-if="isCommentReplyLoading(item.id)" class="comment-reply-empty">回复加载中...</div>
+                    <template v-else>
+                      <div v-if="getCommentReplies(item.id).length === 0" class="comment-reply-empty">暂无回复，来发表第一条回复吧</div>
+                      <div
+                        v-for="reply in getCommentReplies(item.id)"
+                        :key="reply.id"
+                        class="comment-reply-item"
+                      >
+                        <img
+                          :src="reply.user?.avatar_url || defaultAvatar"
+                          alt=""
+                          class="comment-reply-avatar"
+                          referrerpolicy="no-referrer"
+                          @error="handleCommentAvatarError"
+                        />
+                        <div class="comment-reply-body">
+                          <div class="comment-reply-meta">
+                            <span class="comment-reply-name">{{ reply.user?.nickname || reply.user?.username || '匿名用户' }}</span>
+                            <span class="comment-reply-username">@{{ reply.user?.username || 'unknown' }}</span>
+                            <time class="comment-reply-time">{{ formatCommentTime(reply.created_at) }}</time>
+                          </div>
+                          <div class="comment-reply-content">{{ reply.content }}</div>
+                        </div>
+                      </div>
+                      <button
+                        v-if="canLoadMoreCommentReplies(item.id)"
+                        class="comment-reply-more-btn"
+                        :disabled="isCommentReplyLoading(item.id)"
+                        @click="loadMoreCommentReplies(item.id)"
+                      >
+                        加载更多回复
+                      </button>
+                    </template>
+                  </div>
+                  <div v-if="isCommentReplyComposerOpen(item.id)" class="comment-reply-compose">
+                    <div v-if="!userStore.isLoggedIn" class="comment-reply-login-tip">
+                      回复需要登录后发布
+                      <button class="comment-login-btn" @click="goLogin">去登录</button>
+                    </div>
+                    <template v-else>
+                      <textarea
+                        v-model="commentReplyDraftMap[item.id]"
+                        class="comment-reply-textarea"
+                        maxlength="300"
+                        placeholder="回复内容需为 2-300 个字符"
+                      ></textarea>
+                      <div class="comment-reply-compose-footer">
+                        <span class="comment-count">{{ getCommentReplyDraftLength(item.id) }}/300</span>
+                        <button
+                          class="comment-submit-btn"
+                          :disabled="isCommentReplySubmitting(item.id) || getCommentReplyDraftLength(item.id) < 2 || getCommentReplyDraftLength(item.id) > 300"
+                          @click="submitCommentReply(item)"
+                        >
+                          {{ isCommentReplySubmitting(item.id) ? '回复中...' : '发布回复' }}
+                        </button>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
@@ -550,6 +644,16 @@ const showCommentReportModal = ref(false)
 const commentReportReason = ref('')
 const commentReportSubmitting = ref(false)
 const commentReportTarget = ref(null)
+const commentVotingMap = ref({})
+const commentReplyComposerIdSet = ref(new Set())
+const commentReplyMap = ref({})
+const commentReplyPaginationMap = ref({})
+const commentReplyLoadingMap = ref({})
+const commentReplySubmittingMap = ref({})
+const commentReplyDraftMap = ref({})
+
+const COMMENT_VOTE_UP = 'up'
+const COMMENT_VOTE_DOWN = 'down'
 
 const quickReportReasons = [
   '收款配置缺失，无法生成支付链接',
@@ -770,6 +874,63 @@ function formatCommentTime(timestamp) {
   return formatDate(value, 'YYYY-MM-DD HH:mm:ss')
 }
 
+function normalizeCommentVoteType(value) {
+  const voteType = String(value || '').toLowerCase()
+  if (voteType === COMMENT_VOTE_UP) return COMMENT_VOTE_UP
+  if (voteType === COMMENT_VOTE_DOWN) return COMMENT_VOTE_DOWN
+  return ''
+}
+
+function isCommentVoting(commentId) {
+  return !!commentVotingMap.value[Number(commentId || 0)]
+}
+
+function isCommentReplyComposerOpen(commentId) {
+  const safeCommentId = Number(commentId || 0)
+  if (!safeCommentId) return false
+  return commentReplyComposerIdSet.value.has(safeCommentId)
+}
+
+function isCommentReplyLoading(commentId) {
+  return !!commentReplyLoadingMap.value[Number(commentId || 0)]
+}
+
+function isCommentReplySubmitting(commentId) {
+  return !!commentReplySubmittingMap.value[Number(commentId || 0)]
+}
+
+function getCommentReplies(commentId) {
+  return commentReplyMap.value[Number(commentId || 0)] || []
+}
+
+function getCommentReplyPagination(commentId) {
+  return commentReplyPaginationMap.value[Number(commentId || 0)] || {
+    total: 0,
+    page: 1,
+    pageSize: 10,
+    totalPages: 0
+  }
+}
+
+function canLoadMoreCommentReplies(commentId) {
+  const pagination = getCommentReplyPagination(commentId)
+  return Number(pagination.page || 0) < Number(pagination.totalPages || 0)
+}
+
+function getCommentReplyDraftLength(commentId) {
+  const safeCommentId = Number(commentId || 0)
+  return String(commentReplyDraftMap.value[safeCommentId] || '').trim().length
+}
+
+function updateCommentListItem(commentId, updater) {
+  const safeCommentId = Number(commentId || 0)
+  if (!safeCommentId || typeof updater !== 'function') return
+  const index = commentList.value.findIndex((item) => Number(item.id || 0) === safeCommentId)
+  if (index < 0) return
+  const current = commentList.value[index]
+  commentList.value[index] = updater(current)
+}
+
 function handleCommentAvatarError(e) {
   e.target.src = defaultAvatar
 }
@@ -801,14 +962,41 @@ async function loadComments(page = 1) {
     const pagination = data.pagination || {}
     commentEnabled.value = !!data.commentEnabled
     commentDisabledReason.value = data.disabledReason || '该物品暂未开启评论'
-    commentList.value = Array.isArray(data.comments) ? data.comments : []
+    const list = Array.isArray(data.comments) ? data.comments : []
+    commentList.value = list.map((item) => ({
+      ...item,
+      upvote_count: Number(item?.upvote_count || item?.upvoteCount || 0),
+      downvote_count: Number(item?.downvote_count || item?.downvoteCount || 0),
+      reply_count: Number(item?.reply_count || item?.replyCount || 0),
+      viewer_vote: normalizeCommentVoteType(item?.viewer_vote || item?.viewerVote)
+    }))
     commentPagination.value = {
       total: Number(pagination.total || 0),
       page: Number(pagination.page || targetPage),
       pageSize: Number(pagination.pageSize || 10),
       totalPages: Number(pagination.totalPages || 0)
     }
+    const validCommentIds = new Set(commentList.value.map((item) => Number(item?.id || 0)).filter((id) => id > 0))
+    commentReplyComposerIdSet.value = new Set(
+      [...commentReplyComposerIdSet.value].filter((id) => validCommentIds.has(Number(id)))
+    )
+    for (const mapRef of [
+      commentVotingMap,
+      commentReplyMap,
+      commentReplyPaginationMap,
+      commentReplyLoadingMap,
+      commentReplySubmittingMap,
+      commentReplyDraftMap
+    ]) {
+      Object.keys(mapRef.value).forEach((rawKey) => {
+        const safeId = Number(rawKey || 0)
+        if (!validCommentIds.has(safeId)) {
+          delete mapRef.value[rawKey]
+        }
+      })
+    }
     commentActionMenuId.value = null
+    void preloadCommentRepliesForVisibleComments()
   } catch (error) {
     toast.error(`加载评论失败：${error.message}`)
   } finally {
@@ -825,6 +1013,188 @@ function changeCommentPage(pageNo) {
 
 function toggleCommentActionMenu(commentId) {
   commentActionMenuId.value = commentActionMenuId.value === commentId ? null : commentId
+}
+
+async function voteComment(comment, voteType) {
+  const safeCommentId = Number(comment?.id || 0)
+  if (!safeCommentId || ![COMMENT_VOTE_UP, COMMENT_VOTE_DOWN].includes(voteType)) return
+
+  if (!userStore.isLoggedIn) {
+    const confirmed = await dialog.confirm('点赞需要先登录，是否前往登录？', {
+      title: '需要登录',
+      icon: '🔐',
+      confirmText: '去登录',
+      cancelText: '取消'
+    })
+    if (confirmed) goLogin()
+    return
+  }
+
+  if (isCommentVoting(safeCommentId)) return
+  commentVotingMap.value[safeCommentId] = true
+
+  try {
+    const currentVote = normalizeCommentVoteType(comment.viewer_vote)
+    const targetVote = currentVote === voteType ? '' : voteType
+    const result = await shopStore.voteProductComment(safeCommentId, targetVote)
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '点赞操作失败')
+        : (result?.error || result?.message || '点赞操作失败')
+      toast.error(message)
+      return
+    }
+
+    const data = result?.data || {}
+    updateCommentListItem(safeCommentId, (current) => ({
+      ...current,
+      viewer_vote: normalizeCommentVoteType(data.viewerVote),
+      upvote_count: Number(data.upvoteCount ?? current.upvote_count ?? 0),
+      downvote_count: Number(data.downvoteCount ?? current.downvote_count ?? 0)
+    }))
+  } catch (error) {
+    toast.error(`点赞操作失败：${error.message}`)
+  } finally {
+    commentVotingMap.value[safeCommentId] = false
+  }
+}
+
+async function preloadCommentRepliesForVisibleComments() {
+  const targets = commentList.value
+    .map((item) => ({
+      id: Number(item?.id || 0),
+      replyCount: Number(item?.reply_count || 0)
+    }))
+    .filter((item) => item.id > 0 && item.replyCount > 0)
+
+  if (targets.length === 0) return
+  await Promise.all(
+    targets.map((item) => loadCommentReplies(item.id, 1, { silent: true, force: true }))
+  )
+}
+
+async function loadCommentReplies(commentId, page = 1, options = {}) {
+  const safeCommentId = Number(commentId || 0)
+  if (!safeCommentId || isCommentReplyLoading(safeCommentId)) return
+  const targetPage = Math.max(Number.parseInt(page, 10) || 1, 1)
+  const append = targetPage > 1
+  const silent = !!options?.silent
+  const force = !!options?.force
+  const loadedOnce = !!commentReplyPaginationMap.value[safeCommentId]
+
+  if (!append && loadedOnce && !force) return
+
+  commentReplyLoadingMap.value[safeCommentId] = true
+  try {
+    const result = await shopStore.fetchProductCommentReplies(safeCommentId, {
+      page: targetPage,
+      pageSize: 10
+    })
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '加载回复失败')
+        : (result?.error || result?.message || '加载回复失败')
+      if (!silent) toast.error(message)
+      return
+    }
+
+    const data = result?.data || {}
+    const list = Array.isArray(data.replies) ? data.replies : []
+    const currentList = commentReplyMap.value[safeCommentId] || []
+    const merged = append
+      ? [...currentList, ...list.filter((item) => !currentList.some((existing) => Number(existing.id) === Number(item.id)))]
+      : list
+    commentReplyMap.value[safeCommentId] = merged
+
+    const pagination = data.pagination || {}
+    commentReplyPaginationMap.value[safeCommentId] = {
+      total: Number(pagination.total || merged.length || 0),
+      page: Number(pagination.page || targetPage),
+      pageSize: Number(pagination.pageSize || 10),
+      totalPages: Number(pagination.totalPages || 0)
+    }
+
+    updateCommentListItem(safeCommentId, (current) => ({
+      ...current,
+      reply_count: Number(pagination.total || current.reply_count || merged.length || 0)
+    }))
+  } catch (error) {
+    if (!silent) toast.error(`加载回复失败：${error.message}`)
+  } finally {
+    commentReplyLoadingMap.value[safeCommentId] = false
+  }
+}
+
+function toggleCommentReplyComposer(commentId) {
+  const safeCommentId = Number(commentId || 0)
+  if (!safeCommentId) return
+  const nextSet = new Set(commentReplyComposerIdSet.value)
+  if (nextSet.has(safeCommentId)) {
+    nextSet.delete(safeCommentId)
+    commentReplyComposerIdSet.value = nextSet
+    return
+  }
+
+  nextSet.add(safeCommentId)
+  commentReplyComposerIdSet.value = nextSet
+  if (!commentReplyPaginationMap.value[safeCommentId]) {
+    void loadCommentReplies(safeCommentId, 1, { silent: true })
+  }
+}
+
+async function loadMoreCommentReplies(commentId) {
+  const safeCommentId = Number(commentId || 0)
+  if (!safeCommentId) return
+  const pagination = getCommentReplyPagination(safeCommentId)
+  if (Number(pagination.page || 0) >= Number(pagination.totalPages || 0)) return
+  await loadCommentReplies(safeCommentId, Number(pagination.page || 1) + 1)
+}
+
+async function submitCommentReply(comment) {
+  const safeCommentId = Number(comment?.id || 0)
+  if (!safeCommentId || isCommentReplySubmitting(safeCommentId)) return
+
+  if (!userStore.isLoggedIn) {
+    const confirmed = await dialog.confirm('回复需要先登录，是否前往登录？', {
+      title: '需要登录',
+      icon: '🔐',
+      confirmText: '去登录',
+      cancelText: '取消'
+    })
+    if (confirmed) goLogin()
+    return
+  }
+
+  const content = String(commentReplyDraftMap.value[safeCommentId] || '').trim()
+  if (content.length < 2 || content.length > 300) {
+    toast.error('回复内容需为 2-300 个字符')
+    return
+  }
+
+  commentReplySubmittingMap.value[safeCommentId] = true
+  try {
+    const result = await shopStore.createProductCommentReply(safeCommentId, content)
+    if (!result?.success) {
+      const message = typeof result?.error === 'object'
+        ? (result.error?.message || result.error?.code || '回复发布失败')
+        : (result?.error || result?.message || '回复发布失败')
+      toast.error(message)
+      return
+    }
+
+    commentReplyDraftMap.value[safeCommentId] = ''
+    const data = result?.data || {}
+    updateCommentListItem(safeCommentId, (current) => ({
+      ...current,
+      reply_count: Number(data.replyCount ?? current.reply_count ?? 0)
+    }))
+    await loadCommentReplies(safeCommentId, 1, { force: true })
+    toast.success(data.message || '回复已发布')
+  } catch (error) {
+    toast.error(`回复发布失败：${error.message}`)
+  } finally {
+    commentReplySubmittingMap.value[safeCommentId] = false
+  }
 }
 
 async function submitComment() {
@@ -2052,16 +2422,18 @@ async function handleBuyLink() {
 }
 
 .comment-action-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-tertiary);
   cursor: pointer;
   line-height: 1;
-  font-size: 18px;
-  padding-bottom: 2px;
+  font-size: 20px;
+  padding: 0 2px 2px;
+}
+
+.comment-action-btn:not(:disabled):hover {
+  color: var(--text-secondary);
 }
 
 .comment-action-btn:disabled {
@@ -2118,7 +2490,188 @@ async function handleBuyLink() {
 .comment-footer {
   margin-top: 8px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.comment-footer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-footer-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.comment-footer-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-footer-btn:not(:disabled):hover {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.comment-reply-btn {
+  border-color: var(--border-light);
+}
+
+.comment-reply-btn.active {
+  background: rgba(38, 111, 63, 0.1);
+  color: #266f3f;
+  border-color: rgba(38, 111, 63, 0.22);
+}
+
+.comment-vote-btn {
+  min-width: 56px;
+  justify-content: center;
+}
+
+.comment-vote-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.comment-vote-btn.active {
+  background: rgba(38, 111, 63, 0.12);
+  color: #266f3f;
+  border-color: rgba(38, 111, 63, 0.25);
+}
+
+.comment-reply-panel {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border-light);
+  padding-top: 10px;
+}
+
+.comment-reply-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-reply-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+  padding: 8px 10px;
+}
+
+.comment-reply-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.comment-reply-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.comment-reply-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-reply-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.comment-reply-username,
+.comment-reply-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.comment-reply-content {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-reply-empty {
+  border: 1px dashed var(--border-light);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.comment-reply-more-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.comment-reply-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comment-reply-compose {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.comment-reply-login-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-reply-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.comment-reply-compose-footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .comment-pagination {

@@ -305,6 +305,32 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
+  async function voteProductComment(commentId, voteType = '') {
+    try {
+      return await api.post(`/api/shop/comments/${commentId}/vote`, { voteType })
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
+  async function fetchProductCommentReplies(commentId, options = {}) {
+    const page = Math.max(Number.parseInt(options.page, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(Number.parseInt(options.pageSize, 10) || 10, 1), 20)
+    try {
+      return await api.get(`/api/shop/comments/${commentId}/replies?page=${page}&pageSize=${pageSize}`)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
+  async function createProductCommentReply(commentId, content) {
+    try {
+      return await api.post(`/api/shop/comments/${commentId}/replies`, { content })
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
   // 获取自己的商品详情 (需要登录，可获取任意状态的商品)
   async function addFavorite(productId) {
     try {
@@ -925,6 +951,9 @@ export const useShopStore = defineStore('shop', () => {
     createProductComment,
     deleteProductComment,
     reportProductComment,
+    voteProductComment,
+    fetchProductCommentReplies,
+    createProductCommentReply,
     addFavorite,
     removeFavorite,
     fetchMyFavorites,
