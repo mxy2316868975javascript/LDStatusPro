@@ -1,7 +1,7 @@
  // ==UserScript==
     // @name         LDStatus Pro
     // @namespace    http://tampermonkey.net/
-    // @version      3.5.5.7
+    // @version      3.5.5.8
     // @description  在 Linux.do 和 IDCFlare 页面显示信任级别进度，支持历史趋势、里程碑通知、阅读时间统计、排行榜系统、我的活动查看。两站点均支持排行榜和云同步功能
     // @author       JackLiii
     // @license      MIT
@@ -16720,6 +16720,16 @@ a:hover{text-decoration:underline;}
              * @param {number} level - 信任等级
              */
             _renderCloudRequirements(cloudReqs, username, level) {
+                const normalizedLevel = Number.parseInt(level, 10);
+                // 0-1级用户使用固定升级目标，避免复用 2+ 规则导致目标值错误
+                if (normalizedLevel === 0 || normalizedLevel === 1) {
+                    const data = {};
+                    cloudReqs.forEach(req => {
+                        data[req.name] = Utils.toSafeInt(req.currentValue, 0);
+                    });
+                    return this._renderSummaryData(data, username, normalizedLevel);
+                }
+
                 // 2-4级用户的升级/保持要求配置（基于 connect 页面的 14 项要求）
                 const LEVEL_2_PLUS_REQUIREMENTS = {
                     '访问次数': 50,           // 50%
@@ -17029,28 +17039,29 @@ a:hover{text-decoration:underline;}
                 // 注意：summary API 返回的是累计总数，而 2→3 级升级要求是"过去100天"的数据
                 // 因此这里的数据仅供参考，不能完全代表升级进度
                 // 升级要求参考: https://linux.do/t/topic/2460
+                const normalizedLevel = Number.parseInt(level, 10);
                 let statsConfig;
                 
-                if (level === 0) {
+                if (normalizedLevel === 0) {
                     // 0级升1级要求：
                     // - 进入5个话题、阅读30篇帖子、阅读10分钟
                     statsConfig = [
-                        { key: '浏览话题', required: 5 },
-                        { key: '已读帖子', required: 30 },
-                        { key: '阅读时间', required: 10 }  // 10分钟
+                        { key: '浏览话题', required: 5, aliases: ['浏览话题', '浏览的话题', '浏览的话题（所有时间）'] },
+                        { key: '已读帖子', required: 30, aliases: ['已读帖子', '已读帖子（所有时间）'] },
+                        { key: '阅读时间', required: 10, aliases: ['阅读时间', '阅读时间(分钟)'] }  // 10分钟
                     ];
-                } else if (level === 1) {
+                } else if (normalizedLevel === 1) {
                     // 1级升2级要求：
                     // - 访问15天、浏览20话题、阅读100帖子、阅读60分钟
                     // - 送出和收到各1个赞、回复3个不同话题
                     statsConfig = [
-                        { key: '访问天数', required: 15 },
-                        { key: '浏览话题', required: 20 },
-                        { key: '已读帖子', required: 100 },
-                        { key: '阅读时间', required: 60 },  // 60分钟
-                        { key: '送出赞', required: 1 },
-                        { key: '获赞', required: 1 },
-                        { key: '回复', required: 3 }  // 3个不同话题
+                        { key: '访问天数', required: 15, aliases: ['访问天数', '访问次数'] },
+                        { key: '送出赞', required: 1, aliases: ['送出赞', '点赞'] },
+                        { key: '获赞', required: 1, aliases: ['获赞'] },
+                        { key: '回复话题', required: 3, aliases: ['回复话题', '回复的话题', '回复'] }, // 3个不同话题
+                        { key: '浏览话题', required: 20, aliases: ['浏览话题', '浏览的话题', '浏览的话题（所有时间）'] },
+                        { key: '已读帖子', required: 100, aliases: ['已读帖子', '已读帖子（所有时间）'] },
+                        { key: '阅读时间', required: 60, aliases: ['阅读时间', '阅读时间(分钟)'] }  // 60分钟
                     ];
                 } else {
                     // 2级及以上用户：仅显示统计数据，不显示升级要求
@@ -17071,10 +17082,19 @@ a:hover{text-decoration:underline;}
                 
                 statsConfig.forEach(config => {
                     // 获取当前值（如果没有数据则默认为 0）
-                    const currentValue = data[config.key] !== undefined ? data[config.key] : 0;
+                    const aliases = Array.isArray(config.aliases) && config.aliases.length
+                        ? config.aliases
+                        : [config.key];
+                    let currentValue = 0;
+                    for (const alias of aliases) {
+                        if (data[alias] !== undefined) {
+                            currentValue = Utils.toSafeInt(data[alias], 0);
+                            break;
+                        }
+                    }
                     const requiredValue = config.required;
                     const isSuccess = currentValue >= requiredValue;
-                    const prev = this.prevReqs.find(p => p.name === config.key);
+                    const prev = this.prevReqs.find(p => p.name === config.key || aliases.includes(p.name));
                     
                     reqs.push({
                         name: config.key,
@@ -17116,8 +17136,10 @@ a:hover{text-decoration:underline;}
                 }
                 
                 // 渲染用户信息和统计数据（与 2 级用户使用相同的 renderReqs 方法）
-                this.renderer.renderUser(username, level.toString(), isOK, reqs, displayName);
-                this.renderer.renderReqs(reqs, level);
+                const levelText = Number.isFinite(normalizedLevel) ? normalizedLevel.toString() : String(level);
+                const levelForRender = Number.isFinite(normalizedLevel) ? normalizedLevel : level;
+                this.renderer.renderUser(username, levelText, isOK, reqs, displayName);
+                this.renderer.renderReqs(reqs, levelForRender);
                 
                 // 保存缓存
                 this.cachedHistory = history;
