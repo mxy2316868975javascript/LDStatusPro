@@ -329,15 +329,20 @@
           </div>
           
           <div class="form-group">
-            <label class="form-label">CDK 卡密 <span class="optional-label">(可选)</span></label>
+            <label class="form-label required">CDK 卡密</label>
             <textarea
               v-model="form.cdkCodes"
               class="form-textarea code"
+              :class="{ 'input-error': showError('cdkCodes', cdkCodesError) }"
               placeholder="每行一个 CDK，支持批量添加&#10;物品发布后也可在「我的物品」中管理 CDK 库存"
               rows="5"
+              ref="cdkCodesInput"
+              @input="markTouched('cdkCodes')"
             ></textarea>
-            <p class="form-hint">
+            <p v-if="showError('cdkCodes', cdkCodesError)" class="form-error">{{ cdkCodesError }}</p>
+            <p v-else class="form-hint">
               <span v-if="cdkCount > 0">已输入 {{ cdkCount }} 个 CDK</span>
+              <span v-else>至少填写 1 个 CDK 卡密</span>
             </p>
           </div>
 
@@ -518,7 +523,8 @@ const touched = ref({
   price: false,
   discount: false,
   image: false,
-  paymentLink: false
+  paymentLink: false,
+  cdkCodes: false
 })
 
 const nameInput = ref(null)
@@ -527,6 +533,7 @@ const priceInput = ref(null)
 const discountInput = ref(null)
 const imageInput = ref(null)
 const paymentLinkInput = ref(null)
+const cdkCodesInput = ref(null)
 const maxPurchaseQuantityInput = ref(null)
 const buyTitleInput = ref(null)
 const buyDetailsInput = ref(null)
@@ -539,6 +546,7 @@ const fieldRefs = {
   discount: discountInput,
   image: imageInput,
   paymentLink: paymentLinkInput,
+  cdkCodes: cdkCodesInput,
   maxPurchaseQuantity: maxPurchaseQuantityInput
 }
 
@@ -882,6 +890,11 @@ const maxPurchaseQuantityError = computed(() => {
   if (value > 1000) return '单人单次购买上限不能超过 1000'
   return ''
 })
+
+const cdkCodesError = computed(() => {
+  if (form.value.productType !== 'cdk') return ''
+  return cdkCount.value > 0 ? '' : '请至少填写 1 个 CDK 卡密'
+})
 const buyTitleError = computed(() => {
   const value = buyForm.value.title?.trim() || ''
   if (!value) return '请输入求购标题'
@@ -940,6 +953,7 @@ const canSubmit = computed(() => {
   if (imageUrlError.value) return false
   if (ruzhanPriceError.value) return false
   if (form.value.productType === 'link' && paymentLinkError.value) return false
+  if (cdkCodesError.value) return false
   if (maxPurchaseQuantityError.value) return false
   return true
 })
@@ -1090,6 +1104,11 @@ async function submitForm() {
     if (!merchantConfigured.value) {
       toast.warning('请先在「收款设置」中配置 LDC 收款信息')
       router.push('/user/settings')
+      return
+    }
+    if (cdkCodesError.value) {
+      toast.error(cdkCodesError.value)
+      focusField('cdkCodes')
       return
     }
     if (maxPurchaseQuantityError.value) {
