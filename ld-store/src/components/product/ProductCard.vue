@@ -207,31 +207,62 @@ const discountPercent = computed(() => Math.round((1 - discount.value) * 100))
 const finalPrice = computed(() => formatPrice(price.value * discount.value))
 const originalPrice = computed(() => formatPrice(price.value))
 
+function toSafeInt(value, fallback = 0) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // 库存
-const stock = computed(() => parseInt(props.product.stock) || 0)
-const availableStock = computed(() => 
-  props.product.availableStock !== undefined 
-    ? props.product.availableStock 
-    : stock.value
-)
-const totalStock = computed(() => props.product.cdkStats?.total || stock.value)
+const stock = computed(() => toSafeInt(props.product.stock, 0))
+const cdkAvailableStock = computed(() => {
+  if (props.product.availableStock !== undefined && props.product.availableStock !== null && props.product.availableStock !== '') {
+    return Math.max(0, toSafeInt(props.product.availableStock, 0))
+  }
+  if (props.product.cdkStats?.available !== undefined && props.product.cdkStats?.available !== null) {
+    return Math.max(0, toSafeInt(props.product.cdkStats.available, 0))
+  }
+  return null
+})
+const cdkTotalStock = computed(() => {
+  if (props.product.cdkStats?.total !== undefined && props.product.cdkStats?.total !== null) {
+    return Math.max(0, toSafeInt(props.product.cdkStats.total, 0))
+  }
+  return null
+})
+const isUnlimitedStock = computed(() => {
+  if (isCdk.value && (cdkAvailableStock.value !== null || cdkTotalStock.value !== null)) {
+    // CDK 商品如果返回了库存统计，优先以统计为准，避免 0 库存误显示为无限
+    return false
+  }
+  return stock.value === -1
+})
+const availableStock = computed(() => {
+  if (isCdk.value && cdkAvailableStock.value !== null) return cdkAvailableStock.value
+  if (isUnlimitedStock.value) return -1
+  return Math.max(0, stock.value)
+})
+const totalStock = computed(() => {
+  if (isCdk.value && cdkTotalStock.value !== null) return cdkTotalStock.value
+  if (availableStock.value === -1) return -1
+  return Math.max(0, stock.value)
+})
 const isOutOfStock = computed(() => 
-  isCdk.value && stock.value !== -1 && availableStock.value <= 0
+  isCdk.value && !isUnlimitedStock.value && availableStock.value <= 0
 )
 
 // 库存状态样式类
 // ≤0: out（售罄）, ≤2: danger（红色）, 3-5: warning（黄色）, >5: normal（绿色）
 const stockClass = computed(() => {
-  if (!isCdk.value || stock.value === -1) return 'normal' // 无限库存显示绿色
+  if (!isCdk.value || isUnlimitedStock.value) return 'normal' // 无限库存显示绿色
   if (availableStock.value <= 0) return 'out'
   if (availableStock.value <= 2) return 'danger'
   if (availableStock.value <= 5) return 'warning'
   return 'normal'
 })
 const stockDisplay = computed(() => {
-  if (stock.value === -1) return '∞'
+  if (isUnlimitedStock.value) return '∞'
   // 如果库存是0，直接显示0，不显示无限符号
-  if (availableStock.value === 0 && totalStock.value === 0) return '0'
+  if (totalStock.value <= 0) return `${Math.max(0, availableStock.value)}`
   return `${availableStock.value}/${totalStock.value}`
 })
 

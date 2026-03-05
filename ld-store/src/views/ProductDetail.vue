@@ -711,20 +711,52 @@ const discountPercent = computed(() => Math.round((1 - discount.value) * 100))
 const finalPrice = computed(() => formatPrice(price.value * discount.value))
 const originalPrice = computed(() => formatPrice(price.value))
 
+function toSafeInt(value, fallback = 0) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // 库存
-const stock = computed(() => parseInt(product.value?.stock) || 0)
-const availableStock = computed(() => 
-  product.value?.availableStock !== undefined 
-    ? product.value.availableStock 
-    : stock.value
-)
-const totalStock = computed(() => product.value?.cdkStats?.total || stock.value)
+const stock = computed(() => toSafeInt(product.value?.stock, 0))
+const cdkAvailableStock = computed(() => {
+  if (product.value?.availableStock !== undefined && product.value?.availableStock !== null && product.value?.availableStock !== '') {
+    return Math.max(0, toSafeInt(product.value.availableStock, 0))
+  }
+  if (product.value?.cdkStats?.available !== undefined && product.value?.cdkStats?.available !== null) {
+    return Math.max(0, toSafeInt(product.value.cdkStats.available, 0))
+  }
+  return null
+})
+const cdkTotalStock = computed(() => {
+  if (product.value?.cdkStats?.total !== undefined && product.value?.cdkStats?.total !== null) {
+    return Math.max(0, toSafeInt(product.value.cdkStats.total, 0))
+  }
+  return null
+})
+const isUnlimitedStock = computed(() => {
+  if (isCdk.value && (cdkAvailableStock.value !== null || cdkTotalStock.value !== null)) {
+    // CDK 商品如果返回了库存统计，优先以统计为准，避免 0 库存误显示为无限
+    return false
+  }
+  return stock.value === -1
+})
+const availableStock = computed(() => {
+  if (isCdk.value && cdkAvailableStock.value !== null) return cdkAvailableStock.value
+  if (isUnlimitedStock.value) return -1
+  return Math.max(0, stock.value)
+})
+const totalStock = computed(() => {
+  if (isCdk.value && cdkTotalStock.value !== null) return cdkTotalStock.value
+  if (availableStock.value === -1) return -1
+  return Math.max(0, stock.value)
+})
 const isOutOfStock = computed(() => 
-  isCdk.value && stock.value !== -1 && availableStock.value <= 0
+  isCdk.value && !isUnlimitedStock.value && availableStock.value <= 0
 )
 const stockClass = computed(() => isOutOfStock.value ? 'low' : '')
 const stockDisplay = computed(() => {
-  if (stock.value === -1) return '∞'
+  if (isUnlimitedStock.value) return '∞'
+  if (totalStock.value <= 0) return `${Math.max(0, availableStock.value)}`
   return `${availableStock.value}/${totalStock.value}`
 })
 const restockButtonText = computed(() => {
@@ -753,7 +785,7 @@ const maxSelectableQuantity = computed(() => {
     limits.push(maxPurchaseQuantity.value)
   }
 
-  if (stock.value !== -1) {
+  if (!isUnlimitedStock.value) {
     limits.push(Math.max(0, Number(availableStock.value) || 0))
   } else {
     const available = Number(availableStock.value)
@@ -784,7 +816,7 @@ const quantityHint = computed(() => {
     hints.push(`单次最多购买 ${maxPurchaseQuantity.value} 个`)
   }
 
-  if (stock.value !== -1) {
+  if (!isUnlimitedStock.value) {
     const canBuyNow = Math.max(0, Number(availableStock.value) || 0)
     hints.push(`当前可购买 ${canBuyNow} 个`)
   }
