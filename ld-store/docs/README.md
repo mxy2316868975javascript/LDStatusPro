@@ -15,6 +15,7 @@
 | 文件 | 作用 |
 |------|------|
 | `src/utils/api.js` | 前端请求封装、超时、鉴权失效处理 |
+| `src/services/shop/` | 商城业务服务层，按 catalog / inventory / order / merchant 拆分 |
 | `src/router/index.js` | 路由定义、登录守卫、维护模式跳转 |
 | `src/stores/shop.js` | 商城核心状态与大部分业务请求入口 |
 | `src/config/maintenance.js` | 维护模式开关与维护页文案 |

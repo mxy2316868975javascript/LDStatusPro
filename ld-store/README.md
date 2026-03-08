@@ -255,6 +255,7 @@ ld-store/
 │   ├── composables/       # 复用逻辑（已清理未使用文件）
 │   ├── config/            # 运行期开关与维护配置
 │   ├── router/            # 路由配置
+│   ├── services/          # 业务服务层（按领域拆分请求逻辑）
 │   ├── stores/            # Pinia 状态管理
 │   ├── styles/            # 全局样式
 │   ├── utils/             # 请求、存储、导航、安全等工具
@@ -282,6 +283,8 @@ ld-store/
 | **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** | 仓库级职责边界、服务拆分与域名语义 |
 
 如后续需要扩展专项文档，优先围绕“部署、架构、故障排查”补充到 `docs/`，不要继续保留与仓库实际不符的占位说明。
+
+当前前端已开始将商城请求从 `src/stores/shop.js` 下沉到 `src/services/shop/`，后续新增接口优先进入 service 层，不要再继续把 URL 拼装和请求细节直接堆回 store。
 
 ---
 
